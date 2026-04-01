@@ -39,6 +39,9 @@ const config = {
   // Add or remove names here. Each will get its own QR code on the dashboard.
   senderSessions: ['sender-1', 'sender-2'],
 
+  // Phone number for the monitor session (optional, if not provided, will use QR code)
+  monitorPhone: null, // e.g. "2348012345678"
+
   // The message to send to the extracted numbers
   messageToSend: `*Stop wasting time typing replies* .
 

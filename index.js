@@ -340,10 +340,10 @@ app.get('/', (req, res) => {
                                                 '<div id="qr-img-' + s.name + '" style="display:none">' +
                                                 '<img src="' + s.qr + '" style="width:200px;height:200px;display:block;margin:0 auto" />' +
                                                 '<small>Scan with WhatsApp</small></div>';
-                            } else if (s.type === 'SENDER' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
-                                actionDisplay = '<form onsubmit="connectSender(event,\\'' + s.name + '\\')" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">' +
-                                                '<input type="tel" placeholder="Phone e.g. 2348012345678" id="phone-' + s.name + '" style="padding:6px;border:1px solid #ccc;border-radius:4px;width:180px" required>' +
-                                                '<button type="submit" style="padding:6px 12px;background:#25d366;color:#fff;border:none;border-radius:4px;cursor:pointer">Connect</button></form>';
+                            } else if (s.type === 'MONITOR' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
+                                actionDisplay = '<form onsubmit="connectMonitor(event)" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">' +
+                                                '<input type="tel" placeholder="Phone e.g. 2348012345678" id="monitor-phone" style="padding:6px;border:1px solid #ccc;border-radius:4px;width:180px" required>' +
+                                                '<button type="submit" style="padding:6px 12px;background:#25d366;color:#fff;border:none;border-radius:4px;cursor:pointer">Connect Monitor</button></form>';
                             }
 
                             const phoneLabel = s.phone ? '<br><small style="color:#888">📱 ' + s.phone + '</small>' : '';
@@ -385,6 +385,27 @@ app.get('/', (req, res) => {
                         const data = await res.json();
                         if (data.success) {
                             alert('Connecting ' + sessionName + ' with phone ' + phone + '...\\n\\nA pairing code will appear shortly.');
+                        } else {
+                            alert('Error: ' + data.message);
+                        }
+                    } catch (err) {
+                        alert('Error connecting: ' + err.message);
+                    }
+                }
+
+                async function connectMonitor(e) {
+                    e.preventDefault();
+                    const phone = document.getElementById('monitor-phone').value.trim();
+                    if (!phone) return;
+                    try {
+                        const res = await fetch('/connect-monitor', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert('Connecting monitor with phone ' + phone + '...\\n\\nA pairing code will appear shortly.');
                         } else {
                             alert('Error: ' + data.message);
                         }
@@ -449,6 +470,22 @@ app.post('/connect-sender', async (req, res) => {
     // Start async, don't await — pairing code will appear in sessionStatus
     startSession(sessionName, 'SENDER', phone).catch(err => console.error('[CONNECT-SENDER] Error:', err));
     res.json({ success: true, message: `Connecting ${sessionName}... Watch for pairing code on dashboard.` });
+});
+
+app.post('/connect-monitor', async (req, res) => {
+    const { phone } = req.body;
+    if (!phone) {
+        return res.status(400).json({ success: false, message: 'phone is required' });
+    }
+    // Only allow if not already connected/initializing
+    const current = sessionStatus['x-com-monitor'];
+    if (current && (current.status === 'connected' || current.status === 'initializing')) {
+        return res.status(400).json({ success: false, message: `Monitor is already ${current.status}` });
+    }
+    console.log(`[CONNECT-MONITOR] Starting monitor with phone ${phone}`);
+    // Start async, don't await — pairing code will appear in sessionStatus
+    startSession('x-com-monitor', 'MONITOR', phone).catch(err => console.error('[CONNECT-MONITOR] Error:', err));
+    res.json({ success: true, message: `Connecting monitor... Watch for pairing code on dashboard.` });
 });
 
 app.get('/api/groups', async (req, res) => {
@@ -615,9 +652,24 @@ app.get('/groups', (req, res) => {
     // 1. Start Server
     app.listen(port, () => console.log(`Dashboard running on port ${port}`));
 
-    // 2. Start Monitor
-    console.log('--- STARTING MONITOR v2.0 ---');
-    const monitor = await startSession('x-com-monitor', 'MONITOR');
+    // 2. Initialize Monitor status — connect manually from dashboard
+    sessionStatus['x-com-monitor'] = {
+        status: 'unknown',
+        qr: '',
+        linkCode: '',
+        phone: config.monitorPhone || '',
+        sent: 0,
+        type: 'MONITOR',
+        name: 'x-com-monitor'
+    };
+
+    // If monitorPhone is set, auto-connect
+    if (config.monitorPhone) {
+        console.log('--- STARTING MONITOR v2.0 ---');
+        startSession('x-com-monitor', 'MONITOR', config.monitorPhone).catch(err => console.error('[AUTO-CONNECT-MONITOR] Error:', err));
+    } else {
+        console.log('--- MONITOR: waiting for manual phone-number connect on dashboard ---');
+    }
 
     // 3. Pre-seed sender statuses — they connect on demand from the dashboard
     if (config.senderSessions && config.senderSessions.length > 0) {
