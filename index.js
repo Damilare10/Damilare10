@@ -348,7 +348,12 @@ app.get('/', (req, res) => {
                                                 '<small>Scan with WhatsApp</small></div>';
                             } else if (s.type === 'MONITOR' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
                                 actionDisplay = '<span style="color:#666">Monitor not connected yet; use the control above to connect.</span>';
+                            } else if (s.type === 'SENDER' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
+                                actionDisplay = '<form onsubmit="connectSender(event, \\'' + s.name + '\\')" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">' +
+                                                '<input type="tel" placeholder="Phone e.g. 2348012345678" id="phone-' + s.name + '" style="padding:6px;border:1px solid #ccc;border-radius:4px;width:180px" required>' +
+                                                '<button type="submit" style="padding:6px 12px;background:#25d366;color:#fff;border:none;border-radius:4px;cursor:pointer">Connect Sender</button></form>';
                             }
+
 
                             const phoneLabel = s.phone ? '<br><small style="color:#888">📱 ' + s.phone + '</small>' : '';
                             
