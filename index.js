@@ -31,7 +31,11 @@ if (fs.existsSync(numbersFile)) {
 }
 
 function saveNumbers() {
-    fs.writeFileSync(numbersFile, JSON.stringify(numbers, null, 2));
+    try {
+        fs.writeFileSync(numbersFile, JSON.stringify(numbers, null, 2));
+    } catch (err) {
+        console.error('Error saving numbers file:', err);
+    }
 }
 
 // BROWSER ARGS FOR AWS EC2
@@ -122,55 +126,63 @@ function setupMonitorEvents(client) {
     console.log('[MONITOR] Setting up message listener...');
 
     client.onMessage(async (message) => {
-        // Basic logging
-        if (message.body === '!ping') {
-            await client.sendText(message.from, 'Pong from Monitor!');
-        }
-
-        // Group tracking
-        if (message.isGroupMsg) {
-            const groupId = message.from;
-            const groupName = message.sender?.name || message.chat?.contact?.name || 'Unknown Group';
-
-            const existing = recentGroups.find(g => g.id === groupId);
-            if (existing) {
-                existing.timestamp = Date.now();
-                if (existing.name === 'Unknown Group' && groupName !== 'Unknown Group') existing.name = groupName;
-            } else {
-                recentGroups.push({ id: groupId, name: groupName, timestamp: Date.now() });
+        try {
+            // Basic logging
+            if (message.body === '!ping') {
+                await client.sendText(message.from, 'Pong from Monitor!');
             }
-        }
 
-        // SCRAPING LOGIC
-        // Check if group is in target list
-        const isTargetGroup = (config.targetGroups || []).includes(message.from);
+            // Group tracking with cleanup (keep only last 24 hours)
+            if (message.isGroupMsg) {
+                const groupId = message.from;
+                const groupName = message.sender?.name || message.chat?.contact?.name || 'Unknown Group';
 
-        if (isTargetGroup && (message.body.includes('x.com') || message.body.includes('twitter.com'))) {
-            console.log(`[MONITOR] Found link in ${message.from}. Scraping...`);
-
-            try {
-                // Get group members
-                const participants = await client.getGroupMembers(message.from);
-                let count = 0;
-
-                participants.forEach(p => {
-                    const number = p.id._serialized.replace('@c.us', '');
-                    // Filter logic
-                    if (number.length > 9 && !numbers.includes(number)) {
-                        numbers.push(number);
-                        messageQueue.push(number);
-                        count++;
-                    }
-                });
-
-                if (count > 0) {
-                    console.log(`[MONITOR] Added ${count} new numbers to queue.`);
-                    saveNumbers();
-                    processQueue();
+                const existing = recentGroups.find(g => g.id === groupId);
+                if (existing) {
+                    existing.timestamp = Date.now();
+                    if (existing.name === 'Unknown Group' && groupName !== 'Unknown Group') existing.name = groupName;
+                } else {
+                    recentGroups.push({ id: groupId, name: groupName, timestamp: Date.now() });
                 }
-            } catch (err) {
-                console.error('[MONITOR] Error scraping group:', err);
+
+                // Cleanup old entries (older than 24 hours)
+                const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+                recentGroups = recentGroups.filter(g => g.timestamp > oneDayAgo);
             }
+
+            // SCRAPING LOGIC
+            // Check if group is in target list
+            const isTargetGroup = (config.targetGroups || []).includes(message.from);
+
+            if (isTargetGroup && (message.body.includes('x.com') || message.body.includes('twitter.com'))) {
+                console.log(`[MONITOR] Found link in ${message.from}. Scraping...`);
+
+                try {
+                    // Get group members
+                    const participants = await client.getGroupMembers(message.from);
+                    let count = 0;
+
+                    participants.forEach(p => {
+                        const number = p.id._serialized.replace('@c.us', '');
+                        // Enhanced filter logic with validation
+                        if (number && number.length >= 10 && number.length <= 15 && /^\d+$/.test(number) && !numbers.includes(number)) {
+                            numbers.push(number);
+                            messageQueue.push(number);
+                            count++;
+                        }
+                    });
+
+                    if (count > 0) {
+                        console.log(`[MONITOR] Added ${count} new numbers to queue.`);
+                        saveNumbers();
+                        processQueue();
+                    }
+                } catch (err) {
+                    console.error('[MONITOR] Error scraping group:', err);
+                }
+            }
+        } catch (err) {
+            console.error('[MONITOR] Error in message handler:', err);
         }
     });
 }
@@ -187,50 +199,59 @@ async function processQueue() {
 
     isProcessing = true;
 
-    // Get healthy senders
-    const activeSenders = [];
-    for (const [name, client] of clients) {
-        // Allow both SENDER and MONITOR sessions to send messages if connected
-        if ((sessionStatus[name]?.type === 'SENDER' || sessionStatus[name]?.type === 'MONITOR') && sessionStatus[name]?.status === 'connected') {
-            activeSenders.push({ name, client });
-        }
-    }
-
-    if (activeSenders.length === 0) {
-        console.log('[QUEUE] No active senders available. Pausing.');
-        isProcessing = false;
-        return;
-    }
-
-    // Process batch
-    while (messageQueue.length > 0 && sendingEnabled) {
-        const number = messageQueue.shift();
-        const sender = activeSenders[senderIndex % activeSenders.length];
-        senderIndex++;
-
-        console.log(`[QUEUE] Sending to ${number} via ${sender.name}...`);
-
-        try {
-            let target = number;
-            // Only add suffix if missing
-            if (!number.includes('@c.us') && !number.includes('@lid') && !number.includes('@g.us')) {
-                target = `${number}@c.us`;
+    try {
+        // Get healthy senders
+        const activeSenders = [];
+        for (const [name, client] of clients) {
+            // Allow both SENDER and MONITOR sessions to send messages if connected
+            if ((sessionStatus[name]?.type === 'SENDER' || sessionStatus[name]?.type === 'MONITOR') && sessionStatus[name]?.status === 'connected') {
+                activeSenders.push({ name, client });
             }
-
-            await sender.client.sendText(target, config.messageToSend);
-            sessionStatus[sender.name].sent++;
-
-            // Random delay
-            const delay = Math.floor(Math.random() * (config.maxDelay - config.minDelay + 1)) + config.minDelay;
-            await new Promise(r => setTimeout(r, delay));
-
-        } catch (err) {
-            console.error(`[QUEUE] Failed to send to ${number}:`, err.message);
-            // Re-queue if critical error? Or just skip. keeping simple for now.
         }
-    }
 
-    isProcessing = false;
+        if (activeSenders.length === 0) {
+            console.log('[QUEUE] No active senders available. Pausing.');
+            return;
+        }
+
+        // Process batch (limit to prevent infinite loops)
+        let processedCount = 0;
+        const maxBatchSize = 50; // Process max 50 messages per batch
+
+        while (messageQueue.length > 0 && sendingEnabled && processedCount < maxBatchSize) {
+            const number = messageQueue.shift();
+            const sender = activeSenders[senderIndex % activeSenders.length];
+            senderIndex++;
+
+            console.log(`[QUEUE] Sending to ${number} via ${sender.name}...`);
+
+            try {
+                let target = number;
+                // Only add suffix if missing
+                if (!number.includes('@c.us') && !number.includes('@lid') && !number.includes('@g.us')) {
+                    target = `${number}@c.us`;
+                }
+
+                await sender.client.sendText(target, config.messageToSend);
+                sessionStatus[sender.name].sent++;
+                processedCount++;
+
+                // Random delay
+                const delay = Math.floor(Math.random() * (config.maxDelay - config.minDelay + 1)) + config.minDelay;
+                await new Promise(r => setTimeout(r, delay));
+
+            } catch (err) {
+                console.error(`[QUEUE] Failed to send to ${number}:`, err.message);
+                // Put failed number back at the end of queue for retry
+                messageQueue.push(number);
+                break; // Stop processing on first error to avoid spam
+            }
+        }
+    } catch (err) {
+        console.error('[QUEUE] Unexpected error in processQueue:', err);
+    } finally {
+        isProcessing = false;
+    }
 }
 
 // =============================================
@@ -250,6 +271,9 @@ app.get('/', (req, res) => {
                 .btn { padding: 10px 20px; background: #25d366; color: white; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 16px; display: inline-block; }
                 .btn.stop { background: #dc3545; }
                 .error-box { background: #fee; color: #c00; border: 1px solid #fcc; padding: 10px; margin: 10px 0; border-radius: 5px; display: none; }
+                .status-connected { color: green; }
+                .status-error { color: red; }
+                .status-other { color: orange; }
             </style>
         </head>
         <body>
@@ -284,7 +308,7 @@ app.get('/', (req, res) => {
                     </tr>
                 </thead>
                 <tbody id="session-table-body">
-                    <tr><td colspan="4">Loading data...</td></tr>
+                    <!-- Rows will be dynamically created -->
                 </tbody>
             </table>
 
@@ -298,12 +322,9 @@ app.get('/', (req, res) => {
             </ul>
 
             <script>
-                async function updateDashboard() {
-                    // Skip refresh if user is currently typing so the keyboard doesn't close
-                    if (document.activeElement && document.activeElement.tagName === 'INPUT') {
-                        return;
-                    }
+                let currentSessions = [];
 
+                async function updateDashboard() {
                     const errorEl = document.getElementById('error-message');
                     try {
                         const response = await fetch('/status');
@@ -330,45 +351,8 @@ app.get('/', (req, res) => {
                             btnEl.classList.remove('stop');
                         }
 
-                        // Update Table
-                        const tbody = document.getElementById('session-table-body');
-                        let rowsHtml = '';
-                        
-                        data.sessions.forEach(s => {
-                            const statusColor = s.status === 'connected' ? 'green' : (s.status === 'error' ? 'red' : 'orange');
-                            let actionDisplay = '';
-
-                            if (s.status === 'connected') {
-                                actionDisplay = '✅ Connected';
-                            } else if (s.status === 'initializing') {
-                                actionDisplay = '<i>Initializing...</i>';
-                            } else if (s.status === 'link-code-pending' && s.linkCode) {
-                                actionDisplay = '<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px;text-align:center">' +
-                                                '<b style="font-size:22px;letter-spacing:4px">' + s.linkCode + '</b><br>' +
-                                                '<small>Enter in WhatsApp &#x2192; Linked Devices &#x2192; Link with Phone Number</small></div>';
-                            } else if (s.status === 'qr-pending' && s.qr) {
-                                actionDisplay = '<button onclick="showQr(\\'' + s.name + '\\')" id="btn-qr-' + s.name + '" style="padding:6px 12px;cursor:pointer;border:1px solid #ccc;border-radius:4px;background:#fff">Show QR Code</button>' +
-                                                '<div id="qr-img-' + s.name + '" style="display:none">' +
-                                                '<img src="' + s.qr + '" style="width:200px;height:200px;display:block;margin:0 auto" />' +
-                                                '<small>Scan with WhatsApp</small></div>';
-                            } else if (s.type === 'MONITOR' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
-                                actionDisplay = '<span style="color:#666">Monitor not connected yet; use the control above to connect.</span>';
-                            } else if (s.type === 'SENDER' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
-                                actionDisplay = '<form onsubmit="connectSender(event, \\'' + s.name + '\\')" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">' +
-                                                '<input type="tel" placeholder="Phone e.g. 2348012345678" id="phone-' + s.name + '" style="padding:6px;border:1px solid #ccc;border-radius:4px;width:180px" required>' +
-                                                '<button type="submit" style="padding:6px 12px;background:#25d366;color:#fff;border:none;border-radius:4px;cursor:pointer">Connect Sender</button></form>';
-                            }
-
-                            const phoneLabel = s.phone ? '<br><small style="color:#888">📱 ' + s.phone + '</small>' : '';
-                            
-                            rowsHtml += '<tr>' +
-                                '<td><b>' + s.name + '</b> <br> <small>' + s.type + '</small>' + phoneLabel + '</td>' +
-                                '<td style="color:' + statusColor + '"><b>' + s.status.toUpperCase() + '</b></td>' +
-                                '<td>' + s.sent + '</td>' +
-                                '<td>' + actionDisplay + '</td>' +
-                                '</tr>';
-                        });
-                        tbody.innerHTML = rowsHtml;
+                        // Update or create table rows
+                        updateTableRows(data.sessions);
 
                         // Update Groups
                         const groupsList = document.getElementById('groups-list');
@@ -378,6 +362,83 @@ app.get('/', (req, res) => {
                         errorEl.innerText = 'Error updating dashboard: ' + err.message;
                         errorEl.style.display = 'block';
                     }
+                }
+
+                function updateTableRows(sessions) {
+                    const tbody = document.getElementById('session-table-body');
+                    
+                    // Remove rows for sessions that no longer exist
+                    const existingRows = Array.from(tbody.querySelectorAll('tr')).map(tr => tr.dataset.sessionName);
+                    const newSessionNames = sessions.map(s => s.name);
+                    
+                    existingRows.forEach(name => {
+                        if (!newSessionNames.includes(name)) {
+                            const row = document.getElementById('row-' + name);
+                            if (row) row.remove();
+                        }
+                    });
+
+                    // Update or add rows
+                    sessions.forEach(s => {
+                        let row = document.getElementById('row-' + s.name);
+                        if (!row) {
+                            // Create new row
+                            row = document.createElement('tr');
+                            row.id = 'row-' + s.name;
+                            row.dataset.sessionName = s.name;
+                            row.innerHTML = \`
+                                <td><b>\${s.name}</b> <br> <small>\${s.type}</small>\${s.phone ? '<br><small style="color:#888">📱 ' + s.phone + '</small>' : ''}</td>
+                                <td><span id="status-\${s.name}" class="status-other"><b>UNKNOWN</b></span></td>
+                                <td id="sent-\${s.name}">0</td>
+                                <td id="action-\${s.name}"></td>
+                            \`;
+                            tbody.appendChild(row);
+                        }
+
+                        // Update status
+                        const statusEl = document.getElementById('status-' + s.name);
+                        const statusColor = s.status === 'connected' ? 'status-connected' : (s.status === 'error' ? 'status-error' : 'status-other');
+                        statusEl.className = statusColor;
+                        statusEl.innerHTML = '<b>' + s.status.toUpperCase() + '</b>';
+
+                        // Update sent count
+                        document.getElementById('sent-' + s.name).innerText = s.sent;
+
+                        // Update action
+                        const actionEl = document.getElementById('action-' + s.name);
+                        let actionDisplay = '';
+
+                        if (s.status === 'connected') {
+                            actionDisplay = '✅ Connected';
+                        } else if (s.status === 'initializing') {
+                            actionDisplay = '<i>Initializing...</i>';
+                        } else if (s.status === 'link-code-pending' && s.linkCode) {
+                            actionDisplay = '<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px;text-align:center">' +
+                                            '<b style="font-size:22px;letter-spacing:4px">' + s.linkCode + '</b><br>' +
+                                            '<small>Enter in WhatsApp &#x2192; Linked Devices &#x2192; Link with Phone Number</small></div>';
+                        } else if (s.status === 'qr-pending' && s.qr) {
+                            actionDisplay = '<button onclick="showQr(\\'' + s.name + '\\')" id="btn-qr-' + s.name + '" style="padding:6px 12px;cursor:pointer;border:1px solid #ccc;border-radius:4px;background:#fff">Show QR Code</button>' +
+                                            '<div id="qr-img-' + s.name + '" style="display:none">' +
+                                            '<img src="' + s.qr + '" style="width:200px;height:200px;display:block;margin:0 auto" />' +
+                                            '<small>Scan with WhatsApp</small></div>';
+                        } else if (s.type === 'MONITOR' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
+                            actionDisplay = '<span style="color:#666">Monitor not connected yet; use the control above to connect.</span>';
+                        } else if (s.type === 'SENDER' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
+                            // Only create form if it doesn't exist
+                            if (!actionEl.querySelector('form')) {
+                                actionDisplay = '<form onsubmit="connectSender(event, \\'' + s.name + '\\')" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">' +
+                                                '<input type="tel" placeholder="Phone e.g. 2348012345678" id="phone-' + s.name + '" style="padding:6px;border:1px solid #ccc;border-radius:4px;width:180px" required>' +
+                                                '<button type="submit" style="padding:6px 12px;background:#25d366;color:#fff;border:none;border-radius:4px;cursor:pointer">Connect Sender</button></form>';
+                            } else {
+                                // Form already exists, don't overwrite
+                                return;
+                            }
+                        }
+
+                        if (actionDisplay) {
+                            actionEl.innerHTML = actionDisplay;
+                        }
+                    });
                 }
 
                 function showQr(name) {
@@ -482,6 +543,13 @@ app.post('/connect-sender', async (req, res) => {
     if (!sessionName || !phone) {
         return res.status(400).json({ success: false, message: 'sessionName and phone are required' });
     }
+
+    // Validate phone number format
+    const phoneRegex = /^\d{10,15}$/;
+    if (!phoneRegex.test(phone)) {
+        return res.status(400).json({ success: false, message: 'Invalid phone number format. Must be 10-15 digits only.' });
+    }
+
     if (!config.senderSessions.includes(sessionName)) {
         return res.status(400).json({ success: false, message: 'Unknown session name' });
     }
@@ -501,6 +569,13 @@ app.post('/connect-monitor', async (req, res) => {
     if (!phone) {
         return res.status(400).json({ success: false, message: 'phone is required' });
     }
+
+    // Validate phone number format
+    const phoneRegex = /^\d{10,15}$/;
+    if (!phoneRegex.test(phone)) {
+        return res.status(400).json({ success: false, message: 'Invalid phone number format. Must be 10-15 digits only.' });
+    }
+
     // Only allow if not already connected/initializing
     const current = sessionStatus['x-com-monitor'];
     if (current && (current.status === 'connected' || current.status === 'initializing')) {
@@ -552,21 +627,43 @@ app.get('/api/groups', async (req, res) => {
 
 app.post('/api/groups/update', (req, res) => {
     const { selectedGroups } = req.body;
-    if (Array.isArray(selectedGroups)) {
-        config.targetGroups = selectedGroups; // update in memory
-        
-        // update config.js file on disk
-        const configPath = './config.js';
+    if (!Array.isArray(selectedGroups)) {
+        return res.status(400).json({ success: false, message: "Invalid data - selectedGroups must be an array" });
+    }
+
+    // Validate that all selected groups are strings
+    if (!selectedGroups.every(g => typeof g === 'string' && g.length > 0)) {
+        return res.status(400).json({ success: false, message: "Invalid group IDs" });
+    }
+
+    config.targetGroups = selectedGroups; // update in memory
+
+    // update config.js file on disk
+    const configPath = './config.js';
+    try {
         if (fs.existsSync(configPath)) {
             let configStr = fs.readFileSync(configPath, 'utf8');
-            configStr = configStr.replace(/targetGroups:\s*\[[\s\S]*?\],/, `targetGroups: ${JSON.stringify(selectedGroups, null, 2)},`);
-            fs.writeFileSync(configPath, configStr);
+
+            // More robust replacement using a better regex
+            const targetGroupsRegex = /targetGroups:\s*\[[\s\S]*?\],/;
+            const newTargetGroups = `targetGroups: ${JSON.stringify(selectedGroups, null, 2)},`;
+
+            if (targetGroupsRegex.test(configStr)) {
+                configStr = configStr.replace(targetGroupsRegex, newTargetGroups);
+                fs.writeFileSync(configPath, configStr);
+                console.log(`[MONITOR] Updated target groups. Now monitoring ${selectedGroups.length} groups.`);
+                res.json({ success: true, message: "Groups updated successfully!" });
+            } else {
+                console.error('[MONITOR] Could not find targetGroups in config file');
+                res.status(500).json({ success: false, message: "Failed to update config file" });
+            }
+        } else {
+            console.error('[MONITOR] Config file not found');
+            res.status(500).json({ success: false, message: "Config file not found" });
         }
-        
-        console.log(`[MONITOR] Updated target groups. Now monitoring ${selectedGroups.length} groups.`);
-        res.json({ success: true, message: "Groups updated successfully!" });
-    } else {
-        res.status(400).json({ success: false, message: "Invalid data" });
+    } catch (err) {
+        console.error('[MONITOR] Error updating config file:', err);
+        res.status(500).json({ success: false, message: "Error updating config file" });
     }
 });
 
@@ -673,52 +770,60 @@ app.get('/groups', (req, res) => {
 // MAIN ENTRY POINT
 // =============================================
 (async () => {
-    // 1. Start Server
-    app.listen(port, () => console.log(`Dashboard running on port ${port}`));
+    try {
+        // 1. Start Server
+        app.listen(port, () => console.log(`Dashboard running on port ${port}`));
 
-    // 2. Initialize Monitor status — connect manually from dashboard
-    sessionStatus['x-com-monitor'] = {
-        status: 'unknown',
-        qr: '',
-        linkCode: '',
-        phone: config.monitorPhone || '',
-        sent: 0,
-        type: 'MONITOR',
-        name: 'x-com-monitor'
-    };
+        // 2. Initialize Monitor status — connect manually from dashboard
+        sessionStatus['x-com-monitor'] = {
+            status: 'unknown',
+            qr: '',
+            linkCode: '',
+            phone: config.monitorPhone || '',
+            sent: 0,
+            type: 'MONITOR',
+            name: 'x-com-monitor'
+        };
 
-    // If monitorPhone is set, auto-connect
-    if (config.monitorPhone) {
-        console.log('--- STARTING MONITOR v2.0 ---');
-        startSession('x-com-monitor', 'MONITOR', config.monitorPhone).catch(err => console.error('[AUTO-CONNECT-MONITOR] Error:', err));
-    } else {
-        console.log('--- MONITOR: waiting for manual phone-number connect on dashboard ---');
-    }
-
-    // 3. Pre-seed sender statuses — they connect on demand from the dashboard
-    if (config.senderSessions && config.senderSessions.length > 0) {
-        console.log('--- SENDERS: waiting for manual phone-number connect on dashboard ---');
-        for (const senderName of config.senderSessions) {
-            // Only pre-seed if not already initialized (e.g. session token exists)
-            sessionStatus[senderName] = sessionStatus[senderName] || {
-                status: 'unknown',
-                qr: '',
-                linkCode: '',
-                phone: '',
-                sent: 0,
-                type: 'SENDER',
-                name: senderName
-            };
+        // If monitorPhone is set, auto-connect
+        if (config.monitorPhone) {
+            console.log('--- STARTING MONITOR v2.0 ---');
+            startSession('x-com-monitor', 'MONITOR', config.monitorPhone).catch(err => console.error('[AUTO-CONNECT-MONITOR] Error:', err));
+        } else {
+            console.log('--- MONITOR: waiting for manual phone-number connect on dashboard ---');
         }
-    } else {
-        console.log('No senders configured.');
+
+        // 3. Pre-seed sender statuses — they connect on demand from the dashboard
+        if (config.senderSessions && Array.isArray(config.senderSessions) && config.senderSessions.length > 0) {
+            console.log('--- SENDERS: waiting for manual phone-number connect on dashboard ---');
+            for (const senderName of config.senderSessions) {
+                if (typeof senderName === 'string' && senderName.length > 0) {
+                    // Only pre-seed if not already initialized (e.g. session token exists)
+                    sessionStatus[senderName] = sessionStatus[senderName] || {
+                        status: 'unknown',
+                        qr: '',
+                        linkCode: '',
+                        phone: '',
+                        sent: 0,
+                        type: 'SENDER',
+                        name: senderName
+                    };
+                }
+            }
+        } else {
+            console.log('No senders configured.');
+        }
+
+        console.log('--- INITIALIZATION COMPLETE ---');
+
+        // Start automatic queue processor
+        setInterval(() => {
+            processQueue().catch(err => console.error('[QUEUE] Error processing:', err));
+        }, 30000); // Check every 30 seconds
+        console.log('[QUEUE] Auto-processor started (30s interval)');
+
+    } catch (err) {
+        console.error('Fatal error during initialization:', err);
+        process.exit(1);
     }
-
-    console.log('--- INITIALIZATION COMPLETE ---');
-
-    // Start automatic queue processor
-    setInterval(() => {
-        processQueue().catch(err => console.error('[QUEUE] Error processing:', err));
-    }, 30000); // Check every 30 seconds
-    console.log('[QUEUE] Auto-processor started (30s interval)');
 })();

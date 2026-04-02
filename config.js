@@ -53,9 +53,9 @@ AIReply lets you: • Get 50 free AI replies on signup
 - Post replies automatically with one click
 If you're active on twitter, this saves you hours.
 
-👉  *https://aireply.onrender.com* 
+👉  *https://aireply.onrender.com*
 
- *Join this group to access other tools* 
+ *Join this group to access other tools*
 
 https://chat.whatsapp.com/JIbysvs6zGw5TU9ecbQujh?mode=gi_t`,
 
@@ -64,5 +64,14 @@ https://chat.whatsapp.com/JIbysvs6zGw5TU9ecbQujh?mode=gi_t`,
   minDelay: 300000,
   maxDelay: 600000
 };
+
+// Basic validation
+if (config.minDelay > config.maxDelay) {
+  throw new Error('minDelay cannot be greater than maxDelay');
+}
+
+if (config.minDelay < 10000) {
+  console.warn('Warning: minDelay is very low, this may violate WhatsApp terms of service');
+}
 
 module.exports = { config };
