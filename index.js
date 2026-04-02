@@ -263,9 +263,9 @@ app.get('/', (req, res) => {
                 <a href="/toggle" id="toggle-btn" class="btn">Loading...</a>
                 <div style="margin-top:12px; border-top:1px solid #ddd; padding-top:12px;">
                     <label for="monitor-phone" style="font-weight:600;">Connect Monitor Phone</label><br>
-                    <input type="tel" id="monitor-phone" placeholder="Phone e.g. 2348012345678" style="padding:8px;border:1px solid #ccc;border-radius:4px;width:220px; margin-right:8px;">
+                    <input type="tel" id="monitor-phone" placeholder="Phone e.g. 2348012345678" style="padding:8px;border:1px solid #ccc;border-radius:4px;width:220px; margin-right:8px;" oninput="localStorage.setItem('monitorPhoneDraft', this.value)">
                     <button onclick="connectMonitor(event)" class="btn" style="background:#007bff;border:none;">Connect Monitor</button>
-                    <div id="monitor-hint" style="font-size:12px;color:#666;margin-top:6px;">Type the number and click connect; this input is not refreshed.</div>
+                    <div id="monitor-hint" style="font-size:12px;color:#666;margin-top:6px;">Type the number and click connect; this input is not refreshed and is auto-saved locally.</div>
                 </div>
             </div>
 
@@ -399,8 +399,10 @@ app.get('/', (req, res) => {
 
                 async function connectMonitor(e) {
                     e.preventDefault();
-                    const phone = document.getElementById('monitor-phone').value.trim();
+                    const phoneEl = document.getElementById('monitor-phone');
+                    const phone = phoneEl.value.trim();
                     if (!phone) return;
+                    localStorage.setItem('monitorPhoneDraft', phone);
                     try {
                         const res = await fetch('/connect-monitor', {
                             method: 'POST',
@@ -418,7 +420,16 @@ app.get('/', (req, res) => {
                     }
                 }
 
+                function restoreMonitorPhoneDraft() {
+                    const saved = localStorage.getItem('monitorPhoneDraft');
+                    if (saved) {
+                        const input = document.getElementById('monitor-phone');
+                        if (input) input.value = saved;
+                    }
+                }
+
                 window.onload = () => {
+                    restoreMonitorPhoneDraft();
                     updateDashboard();
                     setInterval(updateDashboard, 3000);
                 };
