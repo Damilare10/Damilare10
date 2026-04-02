@@ -261,6 +261,12 @@ app.get('/', (req, res) => {
                 <h3>Controls</h3>
                 <p>Sending Status: <b id="sending-status">Loading...</b></p>
                 <a href="/toggle" id="toggle-btn" class="btn">Loading...</a>
+                <div style="margin-top:12px; border-top:1px solid #ddd; padding-top:12px;">
+                    <label for="monitor-phone" style="font-weight:600;">Connect Monitor Phone</label><br>
+                    <input type="tel" id="monitor-phone" placeholder="Phone e.g. 2348012345678" style="padding:8px;border:1px solid #ccc;border-radius:4px;width:220px; margin-right:8px;">
+                    <button onclick="connectMonitor(event)" class="btn" style="background:#007bff;border:none;">Connect Monitor</button>
+                    <div id="monitor-hint" style="font-size:12px;color:#666;margin-top:6px;">Type the number and click connect; this input is not refreshed.</div>
+                </div>
             </div>
 
             <div style="margin-top: 20px;">
@@ -341,9 +347,7 @@ app.get('/', (req, res) => {
                                                 '<img src="' + s.qr + '" style="width:200px;height:200px;display:block;margin:0 auto" />' +
                                                 '<small>Scan with WhatsApp</small></div>';
                             } else if (s.type === 'MONITOR' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
-                                actionDisplay = '<form onsubmit="connectMonitor(event)" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">' +
-                                                '<input type="tel" placeholder="Phone e.g. 2348012345678" id="monitor-phone" style="padding:6px;border:1px solid #ccc;border-radius:4px;width:180px" required>' +
-                                                '<button type="submit" style="padding:6px 12px;background:#25d366;color:#fff;border:none;border-radius:4px;cursor:pointer">Connect Monitor</button></form>';
+                                actionDisplay = '<span style="color:#666">Monitor not connected yet; use the control above to connect.</span>';
                             }
 
                             const phoneLabel = s.phone ? '<br><small style="color:#888">📱 ' + s.phone + '</small>' : '';
