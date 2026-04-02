@@ -88,6 +88,10 @@ async function startSession(sessionName, type = 'SENDER', phoneNumber = null) {
                 sessionStatus[sessionName].status = 'link-code-pending';
                 console.log(`[${type}:${sessionName}] 📱 Pairing code: ${code} (enter in WhatsApp > Linked Devices > Link with Phone Number)`);
             };
+            // avoid QR in phone pairing flow
+            createOptions.catchQR = () => {
+                /* ignore QR code when using phone + code pairing */
+            };
         } else {
             // QR mode
             createOptions.catchQR = (base64Qr, asciiQR) => {
