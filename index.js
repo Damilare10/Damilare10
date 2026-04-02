@@ -263,63 +263,280 @@ app.get('/', (req, res) => {
         <html>
         <head>
             <title>WhatsPromoBot Dashboard</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-                body { font-family: sans-serif; padding: 20px; color: #333; }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; }
-                th, td { padding: 12px; border: 1px solid #eee; text-align: center; vertical-align: middle; }
-                th { background: #fcfcfc; color: #666; font-weight: 600; }
-                .btn { padding: 10px 20px; background: #25d366; color: white; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 16px; display: inline-block; }
-                .btn.stop { background: #dc3545; }
-                .error-box { background: #fee; color: #c00; border: 1px solid #fcc; padding: 10px; margin: 10px 0; border-radius: 5px; display: none; }
-                .status-connected { color: green; }
-                .status-error { color: red; }
-                .status-other { color: orange; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    padding: 20px;
+                    color: #2c3e50;
+                }
+                .container { max-width: 1200px; margin: 0 auto; }
+                h1 { 
+                    color: white; 
+                    margin-bottom: 30px; 
+                    text-align: center;
+                    font-size: 2.5em;
+                    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+                }
+                
+                .card {
+                    background: white;
+                    border-radius: 12px;
+                    padding: 25px;
+                    margin-bottom: 20px;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+                    transition: transform 0.3s ease, box-shadow 0.3s ease;
+                }
+                .card:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.15); }
+                
+                .card h2, .card h3 { 
+                    color: #667eea; 
+                    margin-bottom: 15px;
+                    font-size: 1.5em;
+                }
+                
+                .stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                    gap: 15px;
+                    margin: 15px 0;
+                }
+                .stat-box {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 20px;
+                    border-radius: 10px;
+                    text-align: center;
+                    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+                }
+                .stat-label { font-size: 0.85em; opacity: 0.9; margin-bottom: 8px; }
+                .stat-value { font-size: 2em; font-weight: bold; }
+                
+                .control-group {
+                    margin: 15px 0;
+                    padding: 15px 0;
+                    border-bottom: 1px solid #eee;
+                }
+                .control-group:last-child { border-bottom: none; }
+                
+                .form-group {
+                    display: flex;
+                    gap: 10px;
+                    align-items: center;
+                    flex-wrap: wrap;
+                    margin: 12px 0;
+                }
+                
+                label { 
+                    font-weight: 600; 
+                    color: #2c3e50;
+                    min-width: 150px;
+                }
+                
+                input[type="tel"] {
+                    padding: 12px 15px;
+                    border: 2px solid #e0e0e0;
+                    border-radius: 8px;
+                    font-size: 1em;
+                    transition: border-color 0.3s ease;
+                    flex: 1;
+                    min-width: 200px;
+                }
+                input[type="tel"]:focus {
+                    outline: none;
+                    border-color: #667eea;
+                    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+                }
+                
+                .btn {
+                    padding: 12px 24px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    border: none;
+                    font-size: 1em;
+                    font-weight: 600;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+                }
+                .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4); }
+                .btn:active { transform: translateY(0); }
+                .btn.stop { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+                
+                .btn-secondary {
+                    background: #007bff;
+                    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+                }
+                .btn-secondary:hover { box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4); }
+                
+                .error-box {
+                    background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+                    color: white;
+                    border-radius: 10px;
+                    padding: 15px 20px;
+                    margin-bottom: 20px;
+                    display: none;
+                    box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);
+                    font-weight: 500;
+                }
+                
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 20px;
+                }
+                
+                th {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 15px 12px;
+                    text-align: left;
+                    font-weight: 600;
+                    border-radius: 8px 8px 0 0;
+                }
+                
+                td {
+                    padding: 15px 12px;
+                    border-bottom: 1px solid #e0e0e0;
+                    text-align: left;
+                    vertical-align: middle;
+                }
+                
+                tr:hover { background: #f8f9ff; }
+                
+                .status-connected { color: #27ae60; font-weight: 600; }
+                .status-error { color: #e74c3c; font-weight: 600; }
+                .status-other { color: #f39c12; font-weight: 600; }
+                
+                .hint-text {
+                    font-size: 0.85em;
+                    color: #7f8c8d;
+                    margin-top: 8px;
+                    line-height: 1.4;
+                }
+                
+                .section-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 20px;
+                    margin-top: 30px;
+                }
+                
+                .groups-list {
+                    list-style: none;
+                    background: #f8f9fa;
+                    border-radius: 10px;
+                    padding: 15px;
+                    max-height: 300px;
+                    overflow-y: auto;
+                }
+                
+                .groups-list li {
+                    padding: 10px 12px;
+                    border-bottom: 1px solid #e0e0e0;
+                    font-size: 0.95em;
+                }
+                
+                .groups-list li:last-child { border-bottom: none; }
+                
+                .status-badge {
+                    display: inline-block;
+                    padding: 6px 12px;
+                    border-radius: 20px;
+                    font-size: 0.85em;
+                    font-weight: 600;
+                }
+                
+                .badge-running { background: #d4edda; color: #155724; }
+                .badge-paused { background: #f8d7da; color: #721c24; }
+                
+                @media (max-width: 768px) {
+                    h1 { font-size: 1.8em; }
+                    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+                    .form-group { flex-direction: column; }
+                    label { min-width: auto; width: 100%; }
+                    input[type="tel"] { min-width: auto; width: 100%; }
+                }
             </style>
         </head>
         <body>
-            <h1>🤖 Bot Dashboard v2.0 (Stable)</h1>
-            
-            <div id="error-message" class="error-box"></div>
+            <div class="container">
+                <h1>🤖 WhatsPromoBot Dashboard</h1>
+                
+                <div id="error-message" class="error-box"></div>
 
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                <h3>Controls</h3>
-                <p>Sending Status: <b id="sending-status">Loading...</b></p>
-                <a href="/toggle" id="toggle-btn" class="btn">Loading...</a>
-                <div style="margin-top:12px; border-top:1px solid #ddd; padding-top:12px;">
-                    <label for="monitor-phone" style="font-weight:600;">Connect Monitor Phone</label><br>
-                    <input type="tel" id="monitor-phone" placeholder="Phone e.g. 2348012345678" style="padding:8px;border:1px solid #ccc;border-radius:4px;width:220px; margin-right:8px;" oninput="localStorage.setItem('monitorPhoneDraft', this.value)">
-                    <button onclick="connectMonitor(event)" class="btn" style="background:#007bff;border:none;">Connect Monitor</button>
-                    <div id="monitor-hint" style="font-size:12px;color:#666;margin-top:6px;">Type the number and click connect; this input is not refreshed and is auto-saved locally.</div>
+                <div class="card">
+                    <h2>🎮 Controls</h2>
+                    <div class="control-group">
+                        <p>Sending Status: <span id="sending-status" class="status-badge badge-paused">Loading...</span></p>
+                        <button id="toggle-btn" class="btn" style="margin-top: 10px;">Loading...</button>
+                    </div>
+                    
+                    <div class="control-group">
+                        <div class="form-group">
+                            <label for="monitor-phone">Monitor Phone</label>
+                            <input type="tel" id="monitor-phone" placeholder="E.g. 2348012345678" oninput="localStorage.setItem('monitorPhoneDraft', this.value)">
+                            <button onclick="connectMonitor(event)" class="btn btn-secondary">Connect Monitor</button>
+                        </div>
+                        <p class="hint-text">📌 Your input is saved locally and never refreshed automatically.</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>📊 Statistics</h2>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Queue</div>
+                            <div class="stat-value" id="queue-count">0</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Scraped</div>
+                            <div class="stat-value" id="scraped-count">0</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Active Senders</div>
+                            <div class="stat-value" id="active-count">0</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Total Sent</div>
+                            <div class="stat-value" id="total-sent">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>📱 Sessions</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Session Name</th>
+                                <th>Status</th>
+                                <th>Messages Sent</th>
+                                <th>Action / Pairing Code</th>
+                            </tr>
+                        </thead>
+                        <tbody id="session-table-body">
+                            <!-- Rows will be dynamically created -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <div class="section-header">
+                        <h2 style="margin: 0;">📁 Monitored Groups</h2>
+                        <a href="/groups" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.9em;">Manage Groups</a>
+                    </div>
+                    <ul class="groups-list" id="groups-list">
+                        <li>Waiting for data...</li>
+                    </ul>
                 </div>
             </div>
-
-            <div style="margin-top: 20px;">
-                <h3>📊 Stats</h3>
-                <p>Queue: <b id="queue-count">0</b> | Scraped: <b id="scraped-count">0</b> | Senders Active: <b id="active-count">0</b> | <span style="color: green">Total Sent: <b id="total-sent">0</b></span></p>
-            </div>
-
-            <table>
-                <thead>
-                    <tr>
-                        <th>Session Name</th>
-                        <th>Status</th>
-                        <th>Messages Sent</th>
-                        <th>Action / Pairing Code</th>
-                    </tr>
-                </thead>
-                <tbody id="session-table-body">
-                    <!-- Rows will be dynamically created -->
-                </tbody>
-            </table>
-
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 30px;">
-                <h3 style="margin: 0;">Active Target Groups (Monitor)</h3>
-                <a href="/groups" class="btn" style="padding: 6px 15px; font-size: 14px; background: #007bff;">Manage Monitored Groups</a>
-            </div>
-            <p><small style="color: #666;">This only shows target groups that have recently received messages.</small></p>
-            <ul id="groups-list">
-                <li>Waiting for data...</li>
-            </ul>
 
             <script>
                 let currentSessions = [];
@@ -342,12 +559,14 @@ app.get('/', (req, res) => {
                         const statusEl = document.getElementById('sending-status');
                         const btnEl = document.getElementById('toggle-btn');
                         if (data.sendingEnabled) {
-                            statusEl.innerHTML = '<span style="color:green">RUNNING</span>';
-                            btnEl.innerText = 'STOP SENDING';
+                            statusEl.innerHTML = 'RUNNING';
+                            statusEl.className = 'status-badge badge-running';
+                            btnEl.innerText = '⏹ STOP SENDING';
                             btnEl.classList.add('stop');
                         } else {
-                            statusEl.innerHTML = '<span style="color:red">PAUSED</span>';
-                            btnEl.innerText = 'START SENDING';
+                            statusEl.innerHTML = 'PAUSED';
+                            statusEl.className = 'status-badge badge-paused';
+                            btnEl.innerText = '▶ START SENDING';
                             btnEl.classList.remove('stop');
                         }
 
@@ -672,28 +891,104 @@ app.get('/groups', (req, res) => {
         <html>
         <head>
             <title>Manage Groups - WhatsPromoBot</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-                body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: auto; }
-                ul { list-style: none; padding: 0; background: #f8f9fa; border-radius: 5px; padding: 10px; }
-                li { padding: 10px; border-bottom: 1px solid #ddd; display: flex; align-items: center; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    padding: 20px;
+                }
+                .container { max-width: 900px; margin: 0 auto; }
+                h1 {
+                    color: white;
+                    margin-bottom: 20px;
+                    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+                }
+                .card {
+                    background: white;
+                    border-radius: 12px;
+                    padding: 25px;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+                }
+                .back-link {
+                    display: inline-block;
+                    margin-bottom: 20px;
+                    color: white;
+                    text-decoration: none;
+                    font-weight: 600;
+                    transition: all 0.3s ease;
+                }
+                .back-link:hover { transform: translateX(-4px); }
+                
+                #loading {
+                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                    color: white;
+                    padding: 25px;
+                    border-radius: 10px;
+                    text-align: center;
+                }
+                
+                ul { list-style: none; padding: 0; }
+                li {
+                    padding: 12px;
+                    border-bottom: 1px solid #e0e0e0;
+                    display: flex;
+                    align-items: center;
+                    transition: background 0.2s ease;
+                }
+                li:hover { background: #f8f9fa; }
                 li:last-child { border-bottom: none; }
-                li label { margin-left: 10px; cursor: pointer; flex-grow: 1; }
-                .btn { padding: 10px 20px; background: #25d366; color: white; text-decoration: none; border-radius: 5px; cursor: pointer; border: none; font-size: 16px; margin-top: 20px; }
+                
+                input[type="checkbox"] {
+                    cursor: pointer;
+                    width: 18px;
+                    height: 18px;
+                }
+                
+                li label {
+                    margin-left: 12px;
+                    cursor: pointer;
+                    flex-grow: 1;
+                    user-select: none;
+                }
+                
+                .btn {
+                    padding: 12px 24px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-size: 1em;
+                    font-weight: 600;
+                    margin-top: 20px;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+                }
+                .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4); }
+                
+                small { color: #7f8c8d; font-size: 0.9em; }
             </style>
         </head>
         <body>
-            <h1>📁 Manage Monitored Groups</h1>
-            <a href="/" style="display:inline-block; margin-bottom: 20px; color: #007bff; text-decoration: none;">&larr; Back to Dashboard</a>
-            
-            <div id="loading" style="padding: 20px; background: #e9ecef; border-radius: 5px;">
-                Loading groups... <br><br>
-                <small>(The monitor session must be connected and synced to fetch chats)</small>
+            <div class="container">
+                <a href="/" class="back-link">← Back to Dashboard</a>
+                <h1>📁 Manage Monitored Groups</h1>
+                
+                <div class="card">
+                    <div id="loading" style="margin-bottom: 20px;">
+                        Loading groups... <br><br>
+                        <small>(The monitor session must be connected and synced to fetch chats)</small>
+                    </div>
+                    
+                    <form id="groups-form" style="display: none;" onsubmit="saveGroups(event)">
+                        <ul id="groups-list"></ul>
+                        <button type="submit" class="btn" id="save-btn">💾 Save Selected Groups</button>
+                    </form>
+                </div>
             </div>
-            
-            <form id="groups-form" style="display: none;" onsubmit="saveGroups(event)">
-                <ul id="groups-list"></ul>
-                <button type="submit" class="btn" id="save-btn">Save Selected Groups</button>
-            </form>
 
             <script>
                 async function loadGroups() {
