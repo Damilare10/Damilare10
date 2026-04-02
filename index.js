@@ -74,7 +74,8 @@ async function startSession(sessionName, type = 'SENDER', phoneNumber = null) {
             browserArgs: AWS_BROWSER_ARGS,
             puppeteerOptions: {
                 args: AWS_BROWSER_ARGS,
-                headless: 'new'
+                headless: 'new',
+                executablePath: '/data/data/com.termux/files/usr/bin/chromium-browser'
             }
         };
 
