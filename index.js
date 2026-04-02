@@ -299,24 +299,13 @@ app.get('/', (req, res) => {
 
             <script>
                 async function updateDashboard() {
+                    // Skip refresh if user is currently typing so the keyboard doesn't close
+                    if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+                        return;
+                    }
+
                     const errorEl = document.getElementById('error-message');
                     try {
-                        // SAVE INPUT STATE BEFORE UPDATING
-                        const inputValues = {};
-                        const activeEl = document.activeElement;
-                        let activeId = null;
-                        let cursorPos = 0;
-                        
-                        // Save all phone input values
-                        const inputs = document.querySelectorAll('input[type="tel"]');
-                        inputs.forEach(inp => {
-                            inputValues[inp.id] = inp.value;
-                            if (inp === activeEl) {
-                                activeId = inp.id;
-                                cursorPos = inp.selectionStart || 0;
-                            }
-                        });
-
                         const response = await fetch('/status');
                         if (!response.ok) throw new Error('Server returned ' + response.status);
                         const data = await response.json();
@@ -365,9 +354,8 @@ app.get('/', (req, res) => {
                             } else if (s.type === 'MONITOR' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
                                 actionDisplay = '<span style="color:#666">Monitor not connected yet; use the control above to connect.</span>';
                             } else if (s.type === 'SENDER' && (s.status === 'unknown' || s.status === 'error' || !s.status)) {
-                                const savedValue = inputValues['phone-' + s.name] || '';
                                 actionDisplay = '<form onsubmit="connectSender(event, \\'' + s.name + '\\')" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">' +
-                                                '<input type="tel" placeholder="Phone e.g. 2348012345678" id="phone-' + s.name + '" value="' + savedValue + '" style="padding:6px;border:1px solid #ccc;border-radius:4px;width:180px" required>' +
+                                                '<input type="tel" placeholder="Phone e.g. 2348012345678" id="phone-' + s.name + '" style="padding:6px;border:1px solid #ccc;border-radius:4px;width:180px" required>' +
                                                 '<button type="submit" style="padding:6px 12px;background:#25d366;color:#fff;border:none;border-radius:4px;cursor:pointer">Connect Sender</button></form>';
                             }
 
@@ -381,13 +369,6 @@ app.get('/', (req, res) => {
                                 '</tr>';
                         });
                         tbody.innerHTML = rowsHtml;
-
-                        // RESTORE FOCUS AND CURSOR POSITION
-                        if (activeId && document.getElementById(activeId)) {
-                            const activeInput = document.getElementById(activeId);
-                            activeInput.focus();
-                            activeInput.setSelectionRange(cursorPos, cursorPos);
-                        }
 
                         // Update Groups
                         const groupsList = document.getElementById('groups-list');
